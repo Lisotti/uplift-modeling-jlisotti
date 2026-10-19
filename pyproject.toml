@@ -1,0 +1,80 @@
+[tool.poetry]
+name = "uplift-modeling"
+version = "2.0.0"
+description = "Uplift Modeling — E-Mail Campaign Optimization — Proyecto Final CAECE"
+authors = ["Joaquin Tomas Lisotti <joaquin.lisotti@gmail.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+
+# ── Core data science ──────────────────────────────────────────
+pandas     = "^2.2"
+numpy      = "^1.26"
+scipy      = "^1.13"
+
+# ── Machine learning ───────────────────────────────────────────
+scikit-learn = "^1.5"
+xgboost      = "^2.1"
+lightgbm     = "^4.5"
+
+# ── Uplift modeling ────────────────────────────────────────────
+# Métricas de uplift: AUUC, Qini coefficient, curvas de uplift
+scikit-uplift = "^0.5"
+
+# ── Visualización ──────────────────────────────────────────────
+matplotlib = "^3.9"
+seaborn    = "^0.13"
+plotly     = "^5.24"
+
+# ── Jupyter ────────────────────────────────────────────────────
+jupyterlab = "^4.2"
+ipykernel  = "^6.29"
+ipywidgets = "^8.1"
+
+# ── API REST (Objetivo 6) ──────────────────────────────────────
+fastapi          = "^0.115"
+uvicorn          = { extras = ["standard"], version = "^0.32" }
+pydantic         = "^2.9"
+
+# ── Dashboard (Objetivo 7) ─────────────────────────────────────
+streamlit = "^1.40"
+
+# ── MLOps / reproducibilidad (Objetivo 8) ─────────────────────
+mlflow    = "^2.18"
+evidently = "^0.6"
+
+# ── Utilidades ─────────────────────────────────────────────────
+tqdm          = "^4.67"
+python-dotenv = "^1.0"
+joblib        = "^1.4"
+boruta = "^0.4.3"
+reportlab = "^5.0.1"
+python-docx = "^1.1"      # generación del informe final (.docx)
+nbconvert = "^7.16"       # ejecución reproducible del notebook final
+httpx = "^0.28"           # cliente de test de la API (FastAPI TestClient)
+pyyaml = "^6.0"           # configs declarativas por dataset
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+black  = "^24.10"
+ruff   = "^0.7"
+
+[build-system]
+requires      = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# ── Configuración de herramientas ──────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+filterwarnings = ["ignore::FutureWarning", "ignore::DeprecationWarning", "ignore::UserWarning"]

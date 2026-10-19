@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+mlruns/
+
+# Configuración local
+.claude/
+.vscode/
+
+# Entregas y material de la cátedra (no se versionan)
+entregas/
+consignas/
+
+# Generación de documentos (informe .docx/.pdf y reporte del EDA)
+scripts/build_report.py
+scripts/docx_helpers.py
+scripts/docx_to_pdf.py
+generate_eda_report.py
+assets/
+
+# Datos grandes y artefactos regenerables
+data/raw/criteo*
+artifacts/*/data/
