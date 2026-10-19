@@ -18,6 +18,7 @@ consignas/
 scripts/build_report.py
 scripts/docx_helpers.py
 scripts/docx_to_pdf.py
+scripts/report_criteo.py
 generate_eda_report.py
 assets/
 
