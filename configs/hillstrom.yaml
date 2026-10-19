@@ -1,0 +1,75 @@
+# Experimento 1 — MineThatData E-Mail Analytics Challenge (Hillstrom, 2008)
+name: hillstrom
+title: "Hillstrom (2008) — campañas de e-mail en un e-commerce de indumentaria"
+description: >
+  64.000 clientes asignados al azar a tres grupos: email de productos masculinos,
+  email de productos femeninos o sin email (control). Ventana de 2 semanas.
+citation: "Hillstrom, K. (2008). The MineThatData e-mail analytics and data mining challenge."
+source:
+  path: data/raw/hillstrom.csv
+  url: http://www.minethatdata.com/Kevin_Hillstrom_MineThatData_E-MailAnalytics_DataMiningChallenge_2008.03.20.csv
+
+treatment:
+  column: segment
+  control: {value: "No E-Mail", label: control, name: "Sin email"}
+  arms:
+    - {value: "Mens E-Mail", label: mens, name: "Mens"}
+    - {value: "Womens E-Mail", label: womens, name: "Womens"}
+  none_action: no_email          # etiqueta de la acción "no contactar"
+  contact_noun: email             # cómo se llama el contacto en el dashboard
+
+outcomes:
+  - {name: visit, type: binary, label: "Visita"}
+  - {name: conversion, type: binary, label: "Conversión"}
+  - {name: spend, type: continuous, label: "Gasto (US$)", hurdle: true}
+primary_outcome: visit
+stratify_outcome: conversion
+
+# Orden de salida del feature engineering (determinístico, sin estado aprendido)
+features:
+  - {name: recency, type: numeric}
+  - {name: history, type: numeric, log1p: true}
+  - {name: mens, type: binary}
+  - {name: womens, type: binary}
+  - {name: both_categories, type: interaction, of: [mens, womens]}
+  - {name: newbie, type: binary}
+  - {name: zip_code, type: categorical, categories: [Rural, Surburban, Urban], prefix: zip}
+  - {name: channel, type: categorical, categories: [Multichannel, Phone, Web], prefix: channel}
+# Columnas presentes en el CSV que NO se usan como features (con motivo)
+excluded_columns:
+  history_segment: "redundante con history (r ≈ 0,94 con su código ordinal; notebooks/EDA/05)"
+
+validation:
+  ranges: {recency: [1, 12], history: [0, null], spend: [0, null]}
+  implies: [[conversion, visit]]          # conversion=1 ⇒ visit=1
+  positive_iff: [[spend, conversion]]     # spend>0 ⇔ conversion=1
+
+modeling:
+  sample_size: null        # usar todo el dataset
+  test_size: 0.30
+  cv_folds: 5
+  cv_repeats: 3
+  n_boot: 200
+  n_jobs: 2
+
+business:
+  cost_per_contact: 0.10
+  cost_label: "Costo por email (USD)"
+  values:                  # beneficio = Σ valor × uplift − costo
+    spend: {label: "Margen bruto sobre ventas", default: 0.40, min: 0.05, max: 0.90, step: 0.05}
+  default_base_size: 100000
+
+segments:                  # segmentos derivados para EDA, dashboard y figuras
+  categoria:
+    "Solo hombre": "mens == 1 and womens == 0"
+    "Solo mujer": "mens == 0 and womens == 1"
+    "Ambas": "mens == 1 and womens == 1"
+
+figures:
+  heatmap: [categoria, channel]
+
+monitoring:
+  n_windows: 4
+  drift_scenario:          # ventana con drift inducido (re-muestreo ponderado)
+    - {column: recency, op: le, value: 3, weight: 3.0}
+    - {column: channel, op: eq, value: Phone, weight: 2.5}

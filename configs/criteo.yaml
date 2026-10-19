@@ -1,0 +1,79 @@
+# Experimento 2 — Criteo Uplift Prediction Dataset v2.1 (Diemert et al., 2021)
+name: criteo
+title: "Criteo (2018) — incrementalidad de publicidad display"
+description: >
+  13,98 millones de usuarios de tests de incrementalidad de Criteo: un 85 % fue
+  expuesto a la publicidad del anunciante y un 15 % se mantuvo como control.
+  Features anonimizadas (f0–f11) y dos outcomes: visita y conversión.
+citation: "Diemert, E., Betlei, A., Renaudin, C., Amini, M.-R., Gregoir, T., & Rahier, T. (2021). A large scale benchmark for individual treatment effect prediction and uplift modeling. arXiv:2111.10106."
+source:
+  path: data/raw/criteo.csv.gz
+  glob: "criteo*.csv*"        # acepta criteo-research-uplift-v2.1.csv(.gz) o la descarga de sklift
+  url: https://huggingface.co/datasets/criteo/criteo-uplift/resolve/main/criteo-research-uplift-v2.1.csv.gz
+  # El archivo no se versiona (≈ 300 MB). Descarga manual alternativa: Kaggle (requiere cuenta).
+  # Descomprimir el CSV en data/raw/ (se acepta cualquier nombre criteo*.csv o criteo*.csv.gz).
+  manual_url: https://www.kaggle.com/datasets/arashnic/uplift-modeling
+  dtypes: {f0: float32, f1: float32, f2: float32, f3: float32, f4: float32, f5: float32,
+           f6: float32, f7: float32, f8: float32, f9: float32, f10: float32, f11: float32,
+           treatment: int8, conversion: int8, visit: int8, exposure: int8}
+
+treatment:
+  column: treatment
+  control: {value: 0, label: control, name: "Sin publicidad"}
+  arms:
+    - {value: 1, label: ads, name: "Publicidad"}
+  none_action: no_ads
+  contact_noun: impresión
+
+outcomes:
+  - {name: visit, type: binary, label: "Visita"}
+  - {name: conversion, type: binary, label: "Conversión"}
+primary_outcome: visit
+stratify_outcome: conversion
+
+features:
+  - {name: f0, type: numeric}
+  - {name: f1, type: numeric}
+  - {name: f2, type: numeric}
+  - {name: f3, type: numeric}
+  - {name: f4, type: numeric}
+  - {name: f5, type: numeric}
+  - {name: f6, type: numeric}
+  - {name: f7, type: numeric}
+  - {name: f8, type: numeric}
+  - {name: f9, type: numeric}
+  - {name: f10, type: numeric}
+  - {name: f11, type: numeric}
+excluded_columns:
+  exposure: "variable post-tratamiento (si el usuario efectivamente vio el anuncio): usarla introduce sesgo"
+
+validation:
+  ranges: {}
+  implies: [[conversion, visit]]
+  positive_iff: []
+
+modeling:
+  sample_size: 2000000     # muestra estratificada para modelar (null = todo el dataset)
+  test_size: 0.30
+  cv_folds: 3              # con millones de filas la varianza entre folds es baja
+  cv_repeats: 1
+  n_boot: 100
+  n_jobs: -1
+
+business:
+  cost_per_contact: 0.005
+  cost_label: "Costo por usuario contactado (USD)"
+  values:
+    conversion: {label: "Valor por conversión (USD)", default: 20.0, min: 1.0, max: 200.0, step: 1.0}
+  default_base_size: 1000000
+
+segments: {}
+
+figures:
+  heatmap: null            # se eligen automáticamente las 2 features más importantes
+
+monitoring:
+  n_windows: 4
+  drift_scenario:
+    - {column: f0, op: quantile_ge, value: 0.75, weight: 6.0}
+    - {column: f8, op: quantile_le, value: 0.25, weight: 4.0}
