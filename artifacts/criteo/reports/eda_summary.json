@@ -1,0 +1,210 @@
+{
+  "dataset": "criteo",
+  "title": "Criteo (2018) — incrementalidad de publicidad display",
+  "quality": {
+    "rows": 13979592,
+    "columns": 16,
+    "memory_mb": 726.9,
+    "missing_total": 0,
+    "missing_by_column": {},
+    "duplicated_rows": 45136,
+    "duplicates_sampled": true,
+    "data_contract": "ok",
+    "excluded_columns": {
+      "exposure": "variable post-tratamiento (si el usuario efectivamente vio el anuncio): usarla introduce sesgo"
+    }
+  },
+  "arms": [
+    {
+      "arm": "Sin publicidad",
+      "label": "control",
+      "n": 2096937,
+      "share": 0.1499998712408774
+    },
+    {
+      "arm": "Publicidad",
+      "label": "ads",
+      "n": 11882655,
+      "share": 0.8500001287591226
+    }
+  ],
+  "max_abs_smd": 0.04883634670571477,
+  "ate": [
+    {
+      "outcome": "visit",
+      "arm": "control",
+      "n": 2096937,
+      "mean": 0.03820095691954503,
+      "mean_lo": 0.03794151343131331,
+      "mean_hi": 0.038460400407776756,
+      "ate": NaN,
+      "ate_lo": NaN,
+      "ate_hi": NaN,
+      "relative_lift": NaN,
+      "p_value": NaN
+    },
+    {
+      "outcome": "visit",
+      "arm": "ads",
+      "n": 11882655,
+      "mean": 0.048543360048743316,
+      "mean_lo": 0.0484211635497834,
+      "mean_hi": 0.04866555654770323,
+      "ate": 0.010342403129198284,
+      "ate_lo": 0.010055622885904043,
+      "ate_hi": 0.010629183372492525,
+      "relative_lift": 0.27073675539019615,
+      "p_value": 0.0
+    },
+    {
+      "outcome": "conversion",
+      "arm": "control",
+      "n": 2096937,
+      "mean": 0.0019375880152813366,
+      "mean_lo": 0.0018780666268527625,
+      "mean_hi": 0.0019971094037099105,
+      "ate": NaN,
+      "ate_lo": NaN,
+      "ate_hi": NaN,
+      "relative_lift": NaN,
+      "p_value": NaN
+    },
+    {
+      "outcome": "conversion",
+      "arm": "ads",
+      "n": 11882655,
+      "mean": 0.0030894610674129645,
+      "mean_lo": 0.0030579060225055907,
+      "mean_hi": 0.0031210161123203383,
+      "ate": 0.0011518730521316279,
+      "ate_lo": 0.001084504539163242,
+      "ate_hi": 0.0012192415651000137,
+      "relative_lift": 0.594488117725262,
+      "p_value": 7.30826328583868e-179
+    }
+  ],
+  "outcome_rates": {
+    "visit": 0.046992000911042324,
+    "conversion": 0.002916680257907384
+  },
+  "events": {
+    "visit": 656929,
+    "conversion": 40774
+  },
+  "top_heterogeneity": [
+    {
+      "feature": "f3",
+      "arm": "ads",
+      "Q": 5918.150464742797,
+      "df": 1,
+      "p_value": 0.0,
+      "ate_range": 0.041834550810521426
+    },
+    {
+      "feature": "f6",
+      "arm": "ads",
+      "Q": 5862.7686822130345,
+      "df": 3,
+      "p_value": 0.0,
+      "ate_range": 0.03542346979385169
+    },
+    {
+      "feature": "f8",
+      "arm": "ads",
+      "Q": 3512.9119833812647,
+      "df": 2,
+      "p_value": 0.0,
+      "ate_range": 0.035821133553334536
+    },
+    {
+      "feature": "f0",
+      "arm": "ads",
+      "Q": 3326.408834435535,
+      "df": 3,
+      "p_value": 0.0,
+      "ate_range": 0.019119095485527093
+    },
+    {
+      "feature": "f9",
+      "arm": "ads",
+      "Q": 2623.7276071709825,
+      "df": 1,
+      "p_value": 0.0,
+      "ate_range": 0.03767560695529417
+    },
+    {
+      "feature": "f5",
+      "arm": "ads",
+      "Q": 2286.969880934763,
+      "df": 1,
+      "p_value": 0.0,
+      "ate_range": 0.05175954909445909
+    },
+    {
+      "feature": "f7",
+      "arm": "ads",
+      "Q": 2286.969880934763,
+      "df": 1,
+      "p_value": 0.0,
+      "ate_range": 0.05175954909445909
+    },
+    {
+      "feature": "f2",
+      "arm": "ads",
+      "Q": 1545.3350154896605,
+      "df": 2,
+      "p_value": 0.0,
+      "ate_range": 0.01660917626237753
+    }
+  ],
+  "strong_correlations": [
+    {
+      "a": "f2",
+      "b": "f8",
+      "rho": -0.8188168316444732
+    },
+    {
+      "a": "f4",
+      "b": "f10",
+      "rho": 0.9992283386029877
+    },
+    {
+      "a": "f5",
+      "b": "f7",
+      "rho": -0.998920130938696
+    }
+  ],
+  "viability": [
+    {
+      "criterio": "Sin valores faltantes",
+      "aprobado": true,
+      "detalle": "0 faltantes"
+    },
+    {
+      "criterio": "Contrato de datos (dominios y restricciones lógicas)",
+      "aprobado": true,
+      "detalle": "ok"
+    },
+    {
+      "criterio": "Aleatorización válida (|SMD| < 0,1 en todas las covariables)",
+      "aprobado": true,
+      "detalle": "|SMD| máx. = 0.049"
+    },
+    {
+      "criterio": "Efecto promedio significativo en visit (p < 0,05)",
+      "aprobado": true,
+      "detalle": "ads: +1.03 pp (p=0.0e+00)"
+    },
+    {
+      "criterio": "Heterogeneidad del efecto detectable (Cochran Q, p < 0,05)",
+      "aprobado": true,
+      "detalle": "12 de 12 pares feature × tratamiento"
+    },
+    {
+      "criterio": "Eventos suficientes por brazo (≥ 100 en cada outcome binario)",
+      "aprobado": true,
+      "detalle": "mínimo = 4,063"
+    }
+  ],
+  "viable": true
+}
