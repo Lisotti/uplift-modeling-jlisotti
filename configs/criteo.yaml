@@ -9,10 +9,9 @@ citation: "Diemert, E., Betlei, A., Renaudin, C., Amini, M.-R., Gregoir, T., & R
 source:
   path: data/raw/criteo.csv.gz
   glob: "criteo*.csv*"        # acepta criteo-research-uplift-v2.1.csv(.gz) o la descarga de sklift
-  url: https://huggingface.co/datasets/criteo/criteo-uplift/resolve/main/criteo-research-uplift-v2.1.csv.gz
-  # El archivo no se versiona (≈ 300 MB). Descarga manual alternativa: Kaggle (requiere cuenta).
+  # El archivo no se versiona (≈ 300 MB). Única fuente disponible: Kaggle (requiere cuenta).
   # Descomprimir el CSV en data/raw/ (se acepta cualquier nombre criteo*.csv o criteo*.csv.gz).
-  manual_url: https://www.kaggle.com/datasets/arashnic/uplift-modeling
+  kaggle: arashnic/uplift-modeling   # https://www.kaggle.com/datasets/arashnic/uplift-modeling
   dtypes: {f0: float32, f1: float32, f2: float32, f3: float32, f4: float32, f5: float32,
            f6: float32, f7: float32, f8: float32, f9: float32, f10: float32, f11: float32,
            treatment: int8, conversion: int8, visit: int8, exposure: int8}

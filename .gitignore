@@ -5,9 +5,11 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 mlruns/
+.uplift/
 
 # Configuración local
-.claude/
+.claude/*
+!.claude/skills/
 .vscode/
 
 # Entregas y material de la cátedra (no se versionan)

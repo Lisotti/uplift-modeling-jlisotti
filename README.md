@@ -35,7 +35,7 @@ dashboard y monitoreo. Incluye dos experimentos:
 │   ├── predict.py                  # scoring y recomendación
 │   ├── monitoring.py               # drift (Evidently + PSI) y performance por ventana
 │   ├── figures.py                  # figuras de resultados
-│   └── download.py                 # descarga de datos desde source.url
+│   └── download.py                 # descarga de datos (Criteo: desde Kaggle)
 ├── api/main.py                     # API REST (FastAPI), un endpoint por dataset
 ├── dashboard/app.py                # simulador de campañas (Streamlit), selector de dataset
 ├── notebooks/EDA/                  # Entrega 2 — EDA original de Hillstrom
@@ -90,18 +90,22 @@ por ejemplo `PYTHONPATH=src:. python -m uplift.train --dataset hillstrom`.
 
 ### Datos de Criteo (sólo para el experimento 2)
 
-Los datos de Criteo **no están en el repositorio** (≈ 300 MB). Antes de correr el pipeline hay que
-descargarlos a `data/raw/` por alguna de estas vías:
+Los datos de Criteo **no están en el repositorio** (≈ 300 MB) y **la única fuente disponible es Kaggle**:
+https://www.kaggle.com/datasets/arashnic/uplift-modeling (requiere una cuenta gratuita).
 
-1. `make download DATASET=criteo` (descarga automática desde Hugging Face).
-2. A mano desde Kaggle: https://www.kaggle.com/datasets/arashnic/uplift-modeling (requiere cuenta).
-   Descomprimí el archivo y copiá el CSV a `data/raw/`.
-3. A mano desde el repositorio oficial de Criteo: https://huggingface.co/datasets/criteo/criteo-uplift
+**A mano:**
 
-Se acepta cualquier archivo `data/raw/criteo*.csv` o `criteo*.csv.gz`
-(por ejemplo `criteo-research-uplift-v2.1.csv`). Para modelar se usa una muestra
-estratificada (`modeling.sample_size` en la config, por defecto 2.000.000 filas;
-`--sample-size` la pisa desde la línea de comandos). El EDA usa el dataset completo.
+1. Entrar a la página del dataset con tu cuenta y hacer clic en **Download**.
+2. Descomprimir el `.zip`.
+3. Copiar el CSV a `data/raw/`. El nombre tiene que empezar con `criteo`
+   (por ejemplo `data/raw/criteo-research-uplift-v2.1.csv`; también sirve `.csv.gz`).
+
+**Con el CLI de Kaggle** (opcional): instalarlo (`pipx install kaggle`), configurar el token en
+`~/.kaggle/kaggle.json` (https://www.kaggle.com/docs/api) y correr `make download DATASET=criteo`.
+Sin el CLI configurado, ese comando sólo muestra los pasos manuales.
+
+Para modelar se usa una muestra estratificada (`modeling.sample_size` en la config, por defecto
+2.000.000 filas; `--sample-size` la pisa desde la línea de comandos). El EDA usa el dataset completo.
 
 ## 4. Paso a paso
 
@@ -113,7 +117,7 @@ notebooks, el dashboard o MLflow hay que **correr el pipeline de cada experiment
 
 ```bash
 make pipeline DATASET=hillstrom      # ~5 min
-make download DATASET=criteo         # una sola vez, ~300 MB (ver "Datos de Criteo")
+# antes: copiar los datos de Criteo desde Kaggle a data/raw/ (ver "Datos de Criteo")
 make pipeline DATASET=criteo         # puede superar los 20 min: 14 M de filas para el EDA, 2 M para modelar
 ```
 
@@ -209,7 +213,7 @@ El código no cambia: un experimento nuevo es un archivo YAML en `configs/`. Flu
    | Bloque | Qué se declara |
    |---|---|
    | `name`, `title`, `description` | identificador (igual al nombre del archivo) y textos para dashboard y API |
-   | `source` | `path` del archivo (opcional: `url` para `make download`, `dtypes`) |
+   | `source` | `path` del archivo (opcional: `kaggle: <owner>/<dataset>` o `url` para `make download`, `dtypes`) |
    | `treatment` | columna, valor del control y de cada brazo (`value`, `label`, `name`) |
    | `outcomes` | cada target con `type: binary` o `continuous` (`hurdle: true` si es gasto con muchos ceros); `primary_outcome` y `stratify_outcome` |
    | `features` | `numeric` (opcional `log1p`), `binary`, `categorical` (con `categories`) o `interaction` |
