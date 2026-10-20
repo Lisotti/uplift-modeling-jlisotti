@@ -24,7 +24,9 @@ En Windows usar `py -3.11` en lugar de `python` si `python` no es 3.11/3.12.
   descargar datos grandes (Criteo ≈ 300 MB) y correr pasos largos (pipeline de Criteo: 20+ min).
 * **No pedir ni escribir credenciales** (por ejemplo el token de Kaggle): si hacen falta, las
   configura el usuario.
-* Los pipelines **sólo se corren si el usuario lo pide**. El setup normal no entrena nada.
+* El setup **entrena** (`train`) los datasets que tienen sus datos en `data/raw/` y todavía no
+  están entrenados, porque el dashboard lo necesita. El resto del pipeline (EDA, monitoreo,
+  figuras, descargas) **sólo se corre si el usuario lo pide**.
 
 ## Flujo de setup (lo que se hace por defecto)
 
@@ -35,21 +37,25 @@ En Windows usar `py -3.11` en lugar de `python` si `python` no es 3.11/3.12.
      `otros_python` en el diagnóstico.
    * Poetry 2.x — ver "Instalar Poetry".
    * macOS: `brew install libomp` si `libomp` es `false` (lo necesita LightGBM).
-3. **Dependencias:** `uplift_env.py install --python <python3.11 | ruta al ejecutable>`
-   (hace `poetry env use` + `poetry install`). Si `.venv` ya existe y funciona, se puede omitir `--python`.
-4. **Verificación:** `uplift_env.py test` (deben pasar todos los tests).
-5. **Servicios:** `uplift_env.py up all` levanta en segundo plano:
+3. **Setup completo:** `uplift_env.py setup --python <python3.11 | ruta al ejecutable>`
+   (si `.venv` ya existe y funciona, se puede omitir `--python`). Hace, en orden:
+   * `poetry env use` + `poetry install`;
+   * los tests (deben pasar todos);
+   * `train` de cada dataset **con datos crudos locales y sin split de test**. Hillstrom trae sus
+     datos en el repo (~3-5 min). Criteo sólo se entrena si el usuario ya copió sus datos (ver
+     "Datos de Criteo"); tarda bastante más: avisarle al usuario antes de arrancar;
+   * `up all`, que levanta en segundo plano:
 
    | Servicio | URL | Requisito |
    |---|---|---|
    | API (FastAPI) | http://localhost:8000/docs | sólo los modelos, que vienen en el repo |
-   | Dashboard (Streamlit) | http://localhost:8501 | split de test de **todos** los datasets con modelo |
-   | MLflow | http://127.0.0.1:8080 | abre vacío hasta que se corra al menos un `train` |
+   | Dashboard (Streamlit) | http://localhost:8501 | split de test de Hillstrom (abre mostrando Hillstrom) |
+   | MLflow | http://127.0.0.1:8080 | muestra las corridas de `train` hechas en esta máquina |
 
-   El script no levanta el dashboard si falta algún split de test y avisa qué dataset falta.
-   En ese caso, explicarle al usuario que hay que entrenar ese dataset (paso "Pipelines") y
-   preguntarle si quiere hacerlo. En un clon nuevo faltan los splits de **todos** los datasets.
-6. **Informar al usuario** las URLs que respondieron OK y cualquier aviso. Logs en `.uplift/logs/<servicio>.log`.
+   Si Criteo no está entrenado, el dashboard abre igual en Hillstrom y Criteo muestra un error
+   sólo si se lo selecciona; contárselo al usuario y ofrecer entrenarlo cuando tenga los datos.
+   Los pasos también existen por separado: `install`, `test`, `pipeline <dataset> --steps train`, `up`.
+4. **Informar al usuario** las URLs que respondieron OK y cualquier aviso. Logs en `.uplift/logs/<servicio>.log`.
 
 Otros comandos: `uplift_env.py status` (qué está corriendo) y `uplift_env.py down [api|dashboard|mlflow|all]`.
 
@@ -66,9 +72,9 @@ Datasets disponibles: un YAML por dataset en `configs/` (hoy `hillstrom` y `crit
 | Entrenar con una muestra más chica | `uplift_env.py pipeline criteo --steps train -- --sample-size 500000` |
 | Tests | `uplift_env.py test` |
 
-* Hillstrom trae los datos en `data/raw/` y su pipeline tarda ~5 min.
+* Hillstrom trae los datos en `data/raw/` y su pipeline completo tarda ~5 min.
 * Criteo necesita sus datos en `data/raw/` antes (ver "Datos de Criteo"); el pipeline completo tarda 20+ min (EDA sobre 14 M de
-  filas, modelado sobre 2 M). Para que el dashboard funcione alcanza con `--steps train`.
+  filas, modelado sobre 2 M). Para usarlo en el dashboard alcanza con `--steps train`.
 * Después de entrenar, si el dashboard o MLflow ya estaban levantados, reiniciarlos
   (`down dashboard` + `up dashboard`) para que tomen los nuevos artefactos.
 * Notebooks: `poetry run jupyter lab` y abrir `notebooks/<dataset>/`. Leen lo que generó el
@@ -107,5 +113,6 @@ Documentación oficial: https://python-poetry.org/docs/#installation
 | Poetry usa Python 3.13 | `uplift_env.py install --python python3.11` |
 | Dashboard: `No existe test para <dataset>` | falta entrenar ese dataset → `pipeline <dataset> --steps train` |
 | MLflow sin experimentos | no se corrió `train` en esta máquina |
+| Caracteres raros (`?`) en la salida | consola sin UTF-8 (p. ej. cp1252 en Windows): es esperado, el script reemplaza lo que no puede mostrar en vez de fallar |
 | `NO RESPONDE` en `up` | leer `.uplift/logs/<servicio>.log`; suele ser un puerto ocupado (8000, 8501, 8080) |
 | `faltan los datos crudos` | Criteo: ver "Datos de Criteo" |

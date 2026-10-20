@@ -6,6 +6,7 @@ Sólo usa la librería estándar: se puede correr antes de instalar las dependen
     python .agents/skills/uplift-setup/scripts/uplift_env.py <comando> [opciones]
 
 Comandos:
+    setup [--python RUTA]          todo junto: install + tests + train de los datasets con datos locales + up all
     check                          diagnóstico: Python, Poetry, libomp, datos y artefactos por dataset
     install [--python RUTA]        poetry env use + poetry install (Poetry tiene que estar instalado)
     up [api|dashboard|mlflow|all]  levanta servicios en segundo plano (logs en .uplift/logs/)
@@ -32,6 +33,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+# Consolas/pipes con codificación limitada (p. ej. cp1252 en Windows): nunca romper por un carácter.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[4]
 STATE = ROOT / ".uplift"
 LOGS = STATE / "logs"
@@ -57,6 +65,7 @@ SERVICES = {
         "open": "http://127.0.0.1:8080",
     },
 }
+DASHBOARD_DEFAULT = "hillstrom"  # dataset con el que abre el dashboard (sus datos vienen en el repo)
 STEPS = {"eda": "uplift.eda", "train": "uplift.train", "monitor": "uplift.monitoring", "figures": "uplift.figures"}
 
 
@@ -65,7 +74,10 @@ STEPS = {"eda": "uplift.eda", "train": "uplift.train", "monitor": "uplift.monito
 def env() -> dict:
     e = os.environ.copy()
     e["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(ROOT)])
-    e.setdefault("PYTHONUTF8", "1")
+    # Los procesos hijos (pipeline, API, dashboard, MLflow) también imprimen Unicode: con
+    # ":replace" usan la codificación de la consola/pipe y reemplazan lo que no se puede mostrar.
+    e.pop("PYTHONUTF8", None)
+    e["PYTHONIOENCODING"] = ":replace"
     return e
 
 
@@ -152,10 +164,10 @@ def cmd_check(_):
     others = [f"python{v}" for v in ("3.11", "3.12")] + (["py"] if IS_WIN else [])
     report["otros_python"] = [o for o in others if shutil.which(o)]
     print(json.dumps(report, indent=2, ensure_ascii=False))
-    missing = [d for d, s in report["datasets"].items() if s["model"] and not s["test_split"]]
-    if missing:
-        print(f"\nAVISO: el dashboard necesita el split de test de todos los datasets con modelo. "
-              f"Falta en: {', '.join(missing)} → correr `pipeline <dataset> --steps train`.")
+    for d, st in report["datasets"].items():
+        if st["model"] and not st["test_split"]:
+            hint = "`pipeline %s --steps train`" % d if st["raw_data"] else "faltan los datos crudos (ver `download %s`)" % d
+            print(f"\nAVISO: {d} no tiene split de test (el dashboard lo necesita para ese dataset): {hint}.")
 
 
 def cmd_install(a):
@@ -171,17 +183,23 @@ def cmd_up(a):
     LOGS.mkdir(parents=True, exist_ok=True)
     targets = which_services(a.service)
     if "dashboard" in targets:
-        missing = [d for d in datasets() if dataset_status(d)["model"] and not dataset_status(d)["test_split"]]
-        if missing and not a.force:
-            print(f"NO SE LEVANTA el dashboard: falta el split de test de {', '.join(missing)}. "
-                  f"Correr antes `pipeline <dataset> --steps train` (o usar --force).")
+        # El dashboard abre en Hillstrom: alcanza con que Hillstrom tenga su split de test.
+        if not dataset_status(DASHBOARD_DEFAULT)["test_split"] and not a.force:
+            print(f"NO SE LEVANTA el dashboard: falta el split de test de {DASHBOARD_DEFAULT}. "
+                  f"Correr antes `pipeline {DASHBOARD_DEFAULT} --steps train` (o usar --force).")
             targets = [t for t in targets if t != "dashboard"]
+        else:
+            others = [d for d in datasets() if d != DASHBOARD_DEFAULT
+                      and dataset_status(d)["model"] and not dataset_status(d)["test_split"]]
+            if others:
+                print(f"AVISO: en el dashboard, {', '.join(others)} va a mostrar un error si se selecciona, "
+                      f"hasta entrenarlo (`pipeline <dataset> --steps train`).")
     if "mlflow" in targets and not any((ROOT / "mlruns").glob("*/meta.yaml")):
         print("AVISO: mlruns/ está vacío; MLflow va a abrir sin experimentos hasta correr un `train`.")
     started = []
     for svc in targets:
         if read_pid(svc):
-            print(f"{svc}: ya estaba corriendo → {SERVICES[svc]['open']}")
+            print(f"{svc}: ya estaba corriendo -> {SERVICES[svc]['open']}")
             continue
         log = open(LOGS / f"{svc}.log", "w")
         kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000008} if IS_WIN else {"start_new_session": True}
@@ -194,7 +212,7 @@ def cmd_up(a):
         while time.time() < deadline and proc.poll() is None and not responds(SERVICES[svc]["url"]):
             time.sleep(1)
         if responds(SERVICES[svc]["url"]):
-            print(f"{svc}: OK → {SERVICES[svc]['open']}")
+            print(f"{svc}: OK -> {SERVICES[svc]['open']}")
         else:
             print(f"{svc}: NO RESPONDE (ver {LOGS / (svc + '.log')})")
             tail = (LOGS / f"{svc}.log").read_text(errors="replace").splitlines()[-15:]
@@ -247,6 +265,31 @@ def cmd_pipeline(a):
         print(f"[{step}] OK en {time.time() - t0:.0f}s", flush=True)
 
 
+def cmd_setup(a):
+    """Setup completo: dependencias, tests, entrenamiento de lo que tenga datos locales y servicios."""
+    exe = poetry()
+    if a.python and run([exe, "env", "use", a.python]):
+        sys.exit("ERROR en `poetry env use`.")
+    if run([exe, "install", "--no-interaction"]):
+        sys.exit("ERROR en `poetry install`.")
+    if not a.skip_tests and run([exe, "run", "pytest", "-q"]):
+        sys.exit("ERROR: fallaron los tests.")
+    for d in datasets():
+        st = dataset_status(d)
+        if st["test_split"]:
+            print(f"[{d}] ya entrenado (split de test presente).")
+        elif not st["raw_data"]:
+            print(f"[{d}] sin datos crudos en data/raw/: no se entrena (ver `download {d}`).")
+        else:
+            print(f"[{d}] entrenando (necesario para el dashboard)...", flush=True)
+            t0 = time.time()
+            if run([exe, "run", "python", "-m", STEPS["train"], "--dataset", d]):
+                sys.exit(f"ERROR entrenando {d}.")
+            print(f"[{d}] train OK en {time.time() - t0:.0f}s", flush=True)
+    if not a.no_up:
+        cmd_up(argparse.Namespace(service="all", timeout=a.timeout, force=False))
+
+
 def cmd_test(_):
     sys.exit(run([poetry(), "run", "pytest", "-q"]))
 
@@ -268,6 +311,9 @@ def main():
     p.add_argument("--steps", default="eda,train,monitor,figures")
     p.set_defaults(fn=cmd_pipeline)
     sub.add_parser("test").set_defaults(fn=cmd_test)
+    p = sub.add_parser("setup"); p.add_argument("--python"); p.add_argument("--skip-tests", action="store_true")
+    p.add_argument("--no-up", action="store_true"); p.add_argument("--timeout", type=int, default=90)
+    p.set_defaults(fn=cmd_setup)
     # todo lo que va después de "--" se pasa tal cual a train (p. ej. -- --sample-size 500000)
     argv = sys.argv[1:]
     extra = argv[argv.index("--") + 1:] if "--" in argv else []
