@@ -75,7 +75,8 @@ if not trained:
 
 # ── Sidebar ────────────────────────────────────────────────────────
 st.sidebar.title("Parámetros de la campaña")
-name = st.sidebar.selectbox("Dataset / experimento", trained, format_func=lambda d: load_config(d).title)
+name = st.sidebar.selectbox("Dataset / experimento", trained, format_func=lambda d: load_config(d).title,
+                            index=trained.index("hillstrom") if "hillstrom" in trained else 0)
 cfg = load_config(name)
 bundle = get_bundle(name)
 test = get_test(name)
