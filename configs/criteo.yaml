@@ -30,6 +30,15 @@ outcomes:
 primary_outcome: visit
 stratify_outcome: conversion
 
+# Índice sustituto: la visita se valoriza con P(conversión | visita) estimada en train
+# (sin gasto: el valor de una conversión sale de business.values).
+surrogate:
+  proxy: visit
+  conversion: conversion
+  value: conversion
+  strata: null
+  shrinkage: true
+
 features:
   - {name: f0, type: numeric}
   - {name: f1, type: numeric}
@@ -57,6 +66,7 @@ modeling:
   cv_folds: 3              # con millones de filas la varianza entre folds es baja
   cv_repeats: 1
   n_boot: 100
+  n_perm: 200              # permutaciones para el p-valor del Qini en test
   n_jobs: -1
 
 business:
