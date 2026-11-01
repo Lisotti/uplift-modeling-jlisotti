@@ -83,6 +83,8 @@ class Prediction(BaseModel):
     recommended_treatment: str
     expected_value: float
     expected_profit_usd: Optional[float] = None
+    expected_value_surrogate: Optional[dict[str, float]] = Field(
+        None, description="Ingreso incremental esperado por tratamiento según el índice sustituto")
 
 
 class ScoringResponse(BaseModel):
@@ -113,6 +115,8 @@ def _predict(cfg: DatasetConfig, req) -> ScoringResponse:
             recommended_treatment=r["recommended_treatment"],
             expected_value=float(r["expected_value"]),
             expected_profit_usd=float(r["expected_profit_usd"]) if "expected_profit_usd" in r else None,
+            expected_value_surrogate=({a.label: float(r[f"expected_value_surrogate_{a.label}"]) for a in cfg.treatments}
+                                      if f"expected_value_surrogate_{cfg.treatments[0].label}" in r else None),
         ))
     return ScoringResponse(dataset=cfg.name, model_version=b["version"], objective=req.objective, predictions=preds)
 
