@@ -1,0 +1,43 @@
+{
+  "visit": {
+    "budget": 1.0,
+    "criterion": "profit_per_1000",
+    "validation_value": 269.70908036900965,
+    "test_value": 128.09632442673043,
+    "test_ci95": [
+      -72.85853547656151,
+      329.05118433002235
+    ],
+    "share_contacted_test": 1.0
+  },
+  "conversion": {
+    "budget": 0.9500000000000001,
+    "criterion": "profit_per_1000",
+    "validation_value": 178.42975444828403,
+    "test_value": 62.25517479767416,
+    "test_ci95": [
+      -118.66583786820246,
+      243.17618746355078
+    ],
+    "share_contacted_test": 0.95
+  },
+  "spend": {
+    "budget": 1.0,
+    "criterion": "profit_per_1000",
+    "validation_value": 180.23289540685465,
+    "test_value": 110.29549820107121,
+    "test_ci95": [
+      -81.32353100322445,
+      301.91452740536687
+    ],
+    "share_contacted_test": 0.95328125
+  },
+  "surrogate": {
+    "budget": 1.0,
+    "criterion": "profit_sur_per_1000",
+    "validation_value": 213.16924999565123,
+    "test_value_surrogate": 213.0719916710006,
+    "test_value_observed": 116.21276595744683,
+    "share_contacted_test": 1.0
+  }
+}

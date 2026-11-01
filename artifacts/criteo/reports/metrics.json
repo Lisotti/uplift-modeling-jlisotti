@@ -4,6 +4,38 @@
     "conversion": "s_learner_lgbm",
     "visit": "t_learner_linear"
   },
+  "budget_selection": {
+    "visit": {
+      "budget": 0.4,
+      "criterion": "profit_per_1000",
+      "validation_value": 19.305322128851543,
+      "test_value": 20.104575163398696,
+      "test_ci95": [
+        14.824755087315783,
+        25.38439523948161
+      ],
+      "share_contacted_test": 0.4
+    },
+    "conversion": {
+      "budget": 0.2,
+      "criterion": "profit_per_1000",
+      "validation_value": 20.630252100840337,
+      "test_value": 21.888888888888882,
+      "test_ci95": [
+        15.560691406164423,
+        28.21708637161334
+      ],
+      "share_contacted_test": 0.2
+    },
+    "surrogate": {
+      "budget": 0.30000000000000004,
+      "criterion": "profit_sur_per_1000",
+      "validation_value": 20.573694336762333,
+      "test_value_surrogate": 21.175198569797818,
+      "test_value_observed": 21.87254901960784,
+      "share_contacted_test": 0.3
+    }
+  },
   "results": {
     "visit": {
       "baseline": {
@@ -52,13 +84,13 @@
       },
       "s_learner_linear": {
         "ads": {
-          "qini_relative": 0.3503573813996084,
+          "qini_relative": 0.3503573815304675,
           "uplift_at_10": 0.061641430256188484,
           "uplift_at_30": 0.028617595622906958,
-          "auuc": 0.03377526270647384,
-          "qini_coef": 0.08696109287373341
+          "auuc": 0.033775262719757615,
+          "qini_coef": 0.08696109290621352
         },
-        "mean_qini_relative": 0.3503573813996084
+        "mean_qini_relative": 0.3503573815304675
       },
       "t_learner_linear": {
         "ads": {
@@ -70,7 +102,20 @@
           "qini_relative_ci95": [
             0.27014869361888977,
             0.39341995108886024
-          ]
+          ],
+          "qini_perm_pvalue": 0.004975124378109453,
+          "qini_diff_vs_baseline": -0.03320132264741382,
+          "qini_diff_vs_baseline_ci95": [
+            -0.07874138700896116,
+            0.03228986062224387
+          ],
+          "qini_diff_vs_baseline_pvalue": 0.9207920792079208,
+          "n_treated": 510000,
+          "n_control": 90000,
+          "events_treated": 24475,
+          "events_control": 3387,
+          "ate": 0.01035686274509804,
+          "ate_mde_80": 0.0019651060609283265
         },
         "mean_qini_relative": 0.330178841363138
       },
@@ -110,7 +155,20 @@
           "qini_relative_ci95": [
             0.4035888688836488,
             0.4712804995231308
-          ]
+          ],
+          "qini_perm_pvalue": 0.004975124378109453,
+          "qini_diff_vs_baseline": 0.0004882264957483118,
+          "qini_diff_vs_baseline_ci95": [
+            -0.0037041488098391944,
+            0.00555320912205818
+          ],
+          "qini_diff_vs_baseline_pvalue": 0.39603960396039606,
+          "n_treated": 510000,
+          "n_control": 90000,
+          "events_treated": 1576,
+          "events_control": 174,
+          "ate": 0.001156862745098039,
+          "ate_mde_80": 0.00046442716112060693
         },
         "mean_qini_relative": 0.4361818337934271
       },
@@ -191,10 +249,10 @@
     {
       "outcome": "conversion",
       "learner": "s_learner_linear",
-      "mean": 0.3296299057405148,
-      "std": 0.06279873980406246,
-      "median": 0.3467954762743961,
-      "sem": 0.03625686933064473
+      "mean": 0.3296299058089817,
+      "std": 0.06279873983213498,
+      "median": 0.3467954764797972,
+      "sem": 0.036256869346852405
     },
     {
       "outcome": "conversion",
@@ -208,9 +266,9 @@
       "outcome": "conversion",
       "learner": "t_learner_linear",
       "mean": 0.3469723114684986,
-      "std": 0.06156052540742506,
-      "median": 0.3482151070595038,
-      "sem": 0.03554198591543165
+      "std": 0.06156052540742504,
+      "median": 0.3482151070595037,
+      "sem": 0.035541985915431645
     },
     {
       "outcome": "conversion",
@@ -223,10 +281,10 @@
     {
       "outcome": "conversion",
       "learner": "x_learner_linear",
-      "mean": 0.3685786135581323,
-      "std": 0.02795380874198536,
-      "median": 0.3597925646484248,
-      "sem": 0.01613913900206056
+      "mean": 0.3685786135472712,
+      "std": 0.02795380874710563,
+      "median": 0.3597925646158418,
+      "sem": 0.01613913900501675
     },
     {
       "outcome": "visit",
@@ -247,10 +305,10 @@
     {
       "outcome": "visit",
       "learner": "s_learner_linear",
-      "mean": 0.3699553047787359,
-      "std": 0.04427179950346944,
+      "mean": 0.3699553046218174,
+      "std": 0.04427179971155088,
       "median": 0.361043045826516,
-      "sem": 0.025560335360837225
+      "sem": 0.025560335480973098
     },
     {
       "outcome": "visit",
@@ -263,10 +321,10 @@
     {
       "outcome": "visit",
       "learner": "t_learner_linear",
-      "mean": 0.3940414417075441,
-      "std": 0.07741058943410543,
+      "mean": 0.3940414416907278,
+      "std": 0.07741058945194848,
       "median": 0.36023587930556183,
-      "sem": 0.04469302464790838
+      "sem": 0.04469302465821006
     },
     {
       "outcome": "visit",
@@ -279,10 +337,120 @@
     {
       "outcome": "visit",
       "learner": "x_learner_linear",
-      "mean": 0.3525381947967115,
-      "std": 0.022038570939785403,
-      "median": 0.3411809673389662,
-      "sem": 0.012723974864639767
+      "mean": 0.3525381947789103,
+      "std": 0.0220385708526906,
+      "median": 0.3411809673389661,
+      "sem": 0.012723974814355558
+    }
+  ],
+  "cv_significance": [
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "baseline",
+      "mean_diff": 0.05409277108052488,
+      "t_corrected": 0.7687881335579184,
+      "p_value": 0.5223937347771076,
+      "n_folds": 3
+    },
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "s_learner_lgbm",
+      "mean_diff": 0.04157226956539103,
+      "t_corrected": 0.6118968454359915,
+      "p_value": 0.6029002174891267,
+      "n_folds": 3
+    },
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "t_learner_lgbm",
+      "mean_diff": 0.06691882902521784,
+      "t_corrected": 3.0534836815426685,
+      "p_value": 0.09259696912105467,
+      "n_folds": 3
+    },
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "x_learner_lgbm",
+      "mean_diff": 0.03187382203454414,
+      "t_corrected": 0.7208254017236221,
+      "p_value": 0.5458856681315685,
+      "n_folds": 3
+    },
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "s_learner_linear",
+      "mean_diff": 0.024086137068910368,
+      "t_corrected": 0.7455306715656247,
+      "p_value": 0.5336620873034512,
+      "n_folds": 3
+    },
+    {
+      "outcome": "visit",
+      "selected": "t_learner_linear",
+      "rival": "x_learner_linear",
+      "mean_diff": 0.041503246911817525,
+      "t_corrected": 0.8198005910243689,
+      "p_value": 0.49848483838134017,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "baseline",
+      "mean_diff": -0.003110981383433816,
+      "t_corrected": -2.0350381783446707,
+      "p_value": 0.17881773314885716,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "t_learner_lgbm",
+      "mean_diff": 0.009864111026965827,
+      "t_corrected": 0.06826192682435593,
+      "p_value": 0.9517876596185058,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "x_learner_lgbm",
+      "mean_diff": 0.07320166820805371,
+      "t_corrected": 0.8381440767290534,
+      "p_value": 0.49015637367828063,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "s_learner_linear",
+      "mean_diff": 0.06517765586239817,
+      "t_corrected": 1.343725563720194,
+      "p_value": 0.31119054144166947,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "t_learner_linear",
+      "mean_diff": 0.04783525020288132,
+      "t_corrected": 1.354606300516482,
+      "p_value": 0.3082761145255779,
+      "n_folds": 3
+    },
+    {
+      "outcome": "conversion",
+      "selected": "s_learner_lgbm",
+      "rival": "x_learner_linear",
+      "mean_diff": 0.026228948124108697,
+      "t_corrected": 9.359558413999135,
+      "p_value": 0.0112235319950481,
+      "n_folds": 3
     }
   ]
 }
