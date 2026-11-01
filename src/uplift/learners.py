@@ -9,6 +9,11 @@ columna ``k-1`` es el efecto estimado del tratamiento ``k`` frente al control:
 Se implementan aquí (y no con una librería externa) porque scikit-uplift sólo
 soporta tratamiento binario y Hillstrom tiene dos campañas alternativas; con
 un único tratamiento (p. ej. Criteo) los mismos learners funcionan con K = 1.
+
+Como alternativa basada en árboles causales se agrega el Causal Forest de EconML
+(``CausalForestDML``, Athey, Tibshirani & Wager, 2019), que estima τ_k(x)
+directamente particionando por heterogeneidad del efecto. Es opcional: se activa
+con ``modeling.extra_learners: [causal_forest]`` en la config.
 """
 
 from __future__ import annotations
@@ -261,12 +266,66 @@ class XLearner(BaseMetaLearner):
         return np.column_stack(cols)
 
 
-def build_learners(binary: bool, n_treatments: int, hurdle: bool = False) -> dict[str, BaseMetaLearner]:
+@dataclass
+class CausalForestLearner(BaseMetaLearner):
+    """Causal Forest (Wager & Athey, 2018; Athey et al., 2019) con EconML ``CausalForestDML``.
+
+    * Residualización (Double ML) con cross-fitting: ``model_y`` es un LightGBM
+      regularizado; ``model_t`` es la propensión marginal (``DummyClassifier``),
+      que en un RCT es la propensión verdadera por diseño.
+    * El bosque se construye con *honesty* (muestras distintas para elegir los
+      cortes y para estimar el efecto en cada hoja), lo que reduce el sobreajuste
+      al ruido en señales de uplift pequeñas.
+    * Tratamiento discreto multi-brazo: τ_k(x) = ``effect(x, T0=0, T1=k)``.
+    """
+
+    name: str = "Causal Forest (EconML)"
+    binary: bool = True
+    n_estimators: int = 200
+    min_samples_leaf: int = 200
+    max_samples: float = 0.45
+    model_: object = None
+
+    def fit(self, X, t, y):
+        try:
+            from econml.dml import CausalForestDML
+        except ImportError as e:  # pragma: no cover - dependencia opcional
+            raise ImportError("El Causal Forest requiere EconML: `poetry add econml`.") from e
+        from sklearn.dummy import DummyClassifier
+
+        X, t, y = _as_frame(X), np.asarray(t, dtype=int), np.asarray(y, dtype=float)
+        model_y = LGBMClassifier(**LGBM_PARAMS) if self.binary else LGBMRegressor(**LGBM_PARAMS)
+        self.model_ = CausalForestDML(
+            model_y=model_y, model_t=DummyClassifier(strategy="prior"),
+            discrete_treatment=True, discrete_outcome=self.binary,
+            categories=list(range(self.n_treatments + 1)), cv=2,
+            n_estimators=self.n_estimators, min_samples_leaf=self.min_samples_leaf,
+            max_samples=self.max_samples, honest=True, inference=False,
+            random_state=RANDOM_STATE, n_jobs=LGBM_PARAMS["n_jobs"],
+        )
+        self.model_.fit(y, t, X=X.to_numpy(dtype=float))
+        return self
+
+    def predict_uplift(self, X) -> np.ndarray:
+        Xn = _as_frame(X).to_numpy(dtype=float)
+        return np.column_stack([self.model_.effect(Xn, T0=0, T1=k).ravel()
+                                for k in range(1, self.n_treatments + 1)])
+
+
+EXTRA_LEARNERS = {"causal_forest"}
+
+
+def build_learners(binary: bool, n_treatments: int, hurdle: bool = False,
+                   extra: dict | list | None = None) -> dict[str, BaseMetaLearner]:
     """Conjunto de modelos comparados para un outcome.
 
     Se combinan tres meta-learners (S, T, X) con dos familias de base learner
     (LightGBM y lineal regularizado) y el baseline de respuesta clásico; para
     outcomes continuos inflados de ceros (``hurdle: true``) se agrega el T-Learner Hurdle.
+
+    ``extra`` agrega learners opcionales (``modeling.extra_learners`` de la config):
+    una lista de nombres o un dict ``{nombre: {hiperparámetros}}``. Hoy:
+    ``causal_forest`` (EconML).
     """
     gbm = make_base_learner(binary, "lgbm")
     lin = make_base_learner(binary, "linear")
@@ -284,6 +343,13 @@ def build_learners(binary: bool, n_treatments: int, hurdle: bool = False) -> dic
     if hurdle and not binary:
         learners["t_learner_hurdle"] = TLearner(base_learner=HurdleRegressor(), n_treatments=k,
                                                 name="T-Learner (Hurdle)")
+    extra = {e: {} for e in extra} if isinstance(extra, (list, tuple)) else (extra or {})
+    unknown = set(extra) - EXTRA_LEARNERS
+    if unknown:
+        raise ValueError(f"Learners desconocidos en modeling.extra_learners: {sorted(unknown)}")
+    if "causal_forest" in extra:
+        learners["causal_forest"] = CausalForestLearner(base_learner=None, n_treatments=k, binary=binary,
+                                                        **(extra["causal_forest"] or {}))
     return learners
 
 
@@ -296,4 +362,5 @@ LEARNER_LABELS = {
     "t_learner_linear": "T-Learner (lineal)",
     "x_learner_linear": "X-Learner (lineal)",
     "t_learner_hurdle": "T-Learner (Hurdle)",
+    "causal_forest": "Causal Forest (EconML)",
 }

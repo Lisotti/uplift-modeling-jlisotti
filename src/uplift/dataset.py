@@ -156,7 +156,8 @@ class DatasetConfig:
 
     @property
     def modeling(self) -> dict:
-        defaults = dict(sample_size=None, test_size=0.3, cv_folds=5, cv_repeats=3, n_boot=200, n_jobs=2)
+        defaults = dict(sample_size=None, test_size=0.3, cv_folds=5, cv_repeats=3, n_boot=200, n_perm=500,
+                        n_jobs=2, extra_learners=[])
         return {**defaults, **(self.raw.get("modeling") or {})}
 
     @property

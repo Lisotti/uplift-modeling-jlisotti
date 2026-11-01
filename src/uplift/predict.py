@@ -30,12 +30,27 @@ def load_bundle(dataset: str | DatasetConfig = "hillstrom") -> dict:
 
 
 def objectives(cfg: DatasetConfig) -> list[str]:
-    return (["profit"] if cfg.business["values"] else []) + cfg.outcome_names
+    """Objetivos de optimización disponibles para un dataset.
+
+    ``profit_surrogate`` (beneficio con la visita valorizada por el índice sustituto)
+    está disponible si la config declara ``surrogate`` y valoriza su outcome ``value``.
+    """
+    objs = ["profit"] if cfg.business["values"] else []
+    sur = cfg.raw.get("surrogate")
+    if sur and sur.get("value") in cfg.business["values"]:
+        objs.append("profit_surrogate")
+    return objs + cfg.outcome_names
 
 
-def predict_uplifts(customers: pd.DataFrame, bundle: dict) -> dict[str, np.ndarray]:
+def predict_uplifts(customers: pd.DataFrame, bundle: dict, cfg: DatasetConfig | None = None) -> dict[str, np.ndarray]:
+    """Uplift por outcome; con ``cfg`` y un bundle con índice sustituto agrega ``surrogate``
+    (ingreso incremental esperado vía visita valorizada)."""
     X = bundle["feature_builder"].transform(customers)
-    return {o: m.predict_uplift(X) for o, m in bundle["models"].items()}
+    out = {o: m.predict_uplift(X) for o, m in bundle["models"].items()}
+    sur = bundle.get("surrogate")
+    if sur is not None and cfg is not None:
+        out["surrogate"] = sur.value_uplift(out[sur.proxy], sur.mu0(X), sur.stratum(customers, cfg))
+    return out
 
 
 def score(customers: pd.DataFrame, cfg: DatasetConfig, bundle: dict | None = None,
@@ -45,18 +60,23 @@ def score(customers: pd.DataFrame, cfg: DatasetConfig, bundle: dict | None = Non
     ``objective``:
       * ``profit``: tratamiento con mayor beneficio esperado (Σ valor × uplift − costo),
         sólo si es positivo. Requiere ``business.values`` en la config.
+      * ``profit_surrogate``: ídem, con el ingreso estimado por el índice sustituto.
       * nombre de un outcome: tratamiento con mayor uplift en ese outcome, si es positivo.
     """
     if objective not in objectives(cfg):
         raise ValueError(f"objective debe ser uno de {objectives(cfg)}")
     bundle = bundle or load_bundle(cfg)
+    if objective == "profit_surrogate" and bundle.get("surrogate") is None:
+        raise ValueError(f"El modelo de '{cfg.name}' no tiene índice sustituto: reentrená con "
+                         f"`make train DATASET={cfg.name}`.")
     validate(customers, cfg, require_outcomes=False)
-    uplifts = predict_uplifts(customers, bundle)
+    uplifts = predict_uplifts(customers, bundle, cfg)
 
     out = pd.DataFrame(index=customers.index)
     for o, u in uplifts.items():
+        prefix = "expected_value_surrogate" if o == "surrogate" else f"uplift_{o}"
         for k, arm in enumerate(cfg.treatments):
-            out[f"uplift_{o}_{arm.label}"] = u[:, k]
+            out[f"{prefix}_{arm.label}"] = u[:, k]
     value = value_matrix(uplifts, cfg, objective, values, cost)
     best = value.argmax(axis=1)
     labels = np.array([a.label for a in cfg.treatments])

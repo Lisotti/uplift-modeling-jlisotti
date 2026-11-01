@@ -132,11 +132,17 @@ def fig_budget(cfg):
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.8))
     rank = _ranking_outcome(cfg)
     bench = pd.read_csv(cfg.tables_dir / f"policy_benchmark_{rank}.csv").set_index("policy")
+    sel_path = cfg.reports_dir / "budget_selection.json"
+    sel_budget = json.load(open(sel_path)) if sel_path.exists() else {}
     for i, o in enumerate(cfg.outcomes):
         bc = pd.read_csv(cfg.tables_dir / f"budget_curve_{o.name}.csv")
         lab = f"Ranking por uplift en {o.label.split(' ')[0].lower()}"
         for ax, col in ((axes[0], left), (axes[1], right)):
             ax.plot(bc.budget * 100, bc[col], color=palette[i % 4], marker="o", ms=3.5, label=lab)
+            if o.name in sel_budget:  # presupuesto elegido en validación (no en test)
+                b = sel_budget[o.name]["budget"]
+                y_b = bc.loc[np.isclose(bc.budget, b), col]
+                ax.plot([b * 100], y_b, marker="*", ms=12, color=palette[i % 4], mec=INK, mew=0.6, ls="none")
     styles = ["--", ":", "-."]
     for ax, col in ((axes[0], left), (axes[1], right)):
         for j, arm in enumerate(cfg.treatments):
@@ -147,9 +153,62 @@ def fig_budget(cfg):
     axes[0].set_title("Beneficio neto incremental" if has_value else f"{cfg.outcome(cfg.primary_outcome).label} incremental")
     axes[1].set_ylabel("Por cada 1.000 clientes")
     axes[1].set_title(f"{cfg.outcome(cfg.stratify_outcome).label} incremental")
+    if sel_budget:
+        axes[0].plot([], [], marker="*", ms=10, color=GRAY, mec=INK, mew=0.6, ls="none",
+                     label="Presupuesto elegido en validación")
     axes[0].legend(fontsize=7.8, loc="upper left")
     fig.tight_layout()
     save(fig, cfg.figures_dir / "budget_curves.png")
+
+
+def fig_surrogate_index(cfg):
+    """Índice sustituto: beneficio de la política en test (observado vs. sustituto) y validación del supuesto."""
+    path = cfg.tables_dir / "budget_curve_surrogate.csv"
+    if not path.exists():
+        return
+    bc = pd.read_csv(path)
+    chk = pd.read_csv(cfg.tables_dir / "surrogate_check.csv")
+    sel = json.load(open(cfg.reports_dir / "budget_selection.json")).get("surrogate", {})
+    sur = cfg.raw["surrogate"]
+    has_value = "profit_sur_per_1000" in bc
+    obs = ("profit_per_1000", "profit_lo", "profit_hi") if has_value else \
+        (f"inc_{sur['value']}_per_1000", f"inc_{sur['value']}_lo", f"inc_{sur['value']}_hi")
+    srg = ("profit_sur_per_1000", "profit_sur_lo", "profit_sur_hi") if has_value else \
+        ("inc_surrogate_per_1000", "inc_surrogate_lo", "inc_surrogate_hi")
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 3.9), gridspec_kw={"width_ratios": [1.5, 1]})
+    ax = axes[0]
+    x = bc.budget * 100
+    for (k, lo, hi), col, lab in ((obs, CORAL, "IPW sobre el gasto observado"),
+                                  (srg, TEAL, "IPW sobre el índice sustituto")):
+        ax.fill_between(x, bc[lo], bc[hi], color=col, alpha=0.15, lw=0)
+        ax.plot(x, bc[k], color=col, marker="o", ms=3.5, label=lab)
+    if sel:
+        b = sel["budget"]
+        for k, col in ((obs[0], CORAL), (srg[0], TEAL)):
+            ax.plot([b * 100], bc.loc[np.isclose(bc.budget, b), k], marker="*", ms=12, color=col, mec=INK,
+                    mew=0.6, ls="none")
+        ax.plot([], [], marker="*", ms=10, color=GRAY, mec=INK, mew=0.6, ls="none",
+                label=f"Presupuesto elegido en validación ({b:.0%})")
+    ax.axhline(0, color=INK, lw=0.8)
+    ax.set_xlabel("% de la base contactada (presupuesto)")
+    ax.set_ylabel("US$ por cada 1.000 clientes" if has_value else "Por cada 1.000 clientes")
+    ax.set_title("Política valorizada con el índice sustituto (test)")
+    ax.legend(fontsize=7.8, loc="upper left")
+    ax = axes[1]
+    arms = list(chk.treatment.unique())
+    names = {a.label: a.name for a in cfg.treatments}
+    for j, (est, col) in enumerate((("observado", CORAL), ("sustituto", TEAL))):
+        d = chk[chk.estimate == est].set_index("treatment").reindex(arms)
+        pos = np.arange(len(arms)) + (j - 0.5) * 0.3
+        ax.errorbar(pos, d.ate, yerr=[d.ate - d.ci_lo, d.ci_hi - d.ate], fmt="o", color=col, capsize=4,
+                    label="Observado" if est == "observado" else "Índice sustituto")
+    ax.axhline(0, color=INK, lw=0.8)
+    ax.set_xticks(np.arange(len(arms)), [names.get(a, a) for a in arms])
+    ax.set_ylabel(f"Efecto promedio sobre {cfg.outcome(sur['value']).label.split(' (')[0].lower()}")
+    ax.set_title("Validación del supuesto (ATE en test, IC 95 %)")
+    ax.legend(fontsize=7.8)
+    fig.tight_layout()
+    save(fig, cfg.figures_dir / "surrogate_index.png")
 
 
 def fig_policy_benchmark(cfg):
@@ -157,11 +216,9 @@ def fig_policy_benchmark(cfg):
     has_value = bool(cfg.business["values"])
     col = "profit_per_1000" if has_value else f"inc_{rank}_per_1000"
     bp = pd.read_csv(cfg.tables_dir / f"policy_benchmark_{rank}.csv")
+    # La fila "Modelo (presupuesto de validación, X%)" ya viene del entrenamiento: el
+    # presupuesto se eligió sobre OOF de train, no buscando el máximo en esta tabla de test.
     bp = bp[bp.policy != "No enviar"]
-    bc = pd.read_csv(cfg.tables_dir / f"budget_curve_{rank}.csv")
-    best = bc.loc[bc[col].idxmax()]
-    bp = pd.concat([bp, pd.DataFrame([{"policy": f"Modelo (óptimo, {best.budget:.0%})", col: best[col],
-                                       "share_contacted": best.share_contacted}])], ignore_index=True)
     bp = bp.iloc[::-1]
     fig, ax = plt.subplots(figsize=(7.5, 0.45 * len(bp) + 0.8))
     cols = [TEAL if p.startswith("Modelo") else LIGHT for p in bp.policy]
@@ -364,6 +421,7 @@ def run(dataset: "str | DatasetConfig" = "hillstrom") -> dict:
     fig_deciles(cfg, test, up, metrics)
     fig_budget(cfg)
     fig_policy_benchmark(cfg)
+    fig_surrogate_index(cfg)
     fig_cate_distribution(cfg, up, metrics)
     meta = fig_surrogate(cfg, test, up, metrics)
     meta["heatmap"] = fig_cate_segments(cfg, test, up, metrics, meta["surrogate_importance"])
