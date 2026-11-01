@@ -44,6 +44,7 @@ def synthetic_cfg(tmp_path_factory):
         "validation": {"implies": [["conversion", "visit"]]},
         "modeling": {"cv_folds": 2, "cv_repeats": 1, "n_boot": 10, "n_jobs": 2},
         "business": {"cost_per_contact": 0.01, "values": {"conversion": {"label": "Valor", "default": 20.0}}},
+        "surrogate": {"proxy": "visit", "conversion": "conversion", "value": "conversion", "strata": None},
         "monitoring": {"n_windows": 2,
                        "drift_scenario": [{"column": "f0", "op": "quantile_ge", "value": 0.75, "weight": 3.0}]},
     }
@@ -63,11 +64,27 @@ def test_end_to_end(synthetic_cfg):
     out = train.run(synthetic_cfg, use_mlflow=False)
     assert set(out["selected"]) == {"visit", "conversion"}
     assert synthetic_cfg.bundle_path.exists()
+    # El presupuesto se elige en validación (OOF de train) y se guarda junto al modelo
+    sel = out["budget_selection"]
+    assert {"visit", "conversion"} <= set(sel) and all(0 <= v["budget"] <= 1 for v in sel.values())
+    assert (synthetic_cfg.reports_dir / "budget_selection.json").exists()
+    assert (synthetic_cfg.models_dir / "train_oof_uplift.npz").exists()
+    # Pruebas de significancia (CV con t-test corregido y test con permutación / bootstrap pareado)
+    sig = pd.read_csv(synthetic_cfg.tables_dir / "test_significance.csv")
+    assert len(sig) == 2 and sig.qini_perm_pvalue.between(0, 1).all() and (sig.events_treated > 0).all()
+    assert (synthetic_cfg.tables_dir / "cv_significance.csv").exists()
+    # Índice sustituto: política valorizada, validación del supuesto y objetivo en el scoring
+    assert "surrogate" in sel and 0 <= sel["surrogate"]["budget"] <= 1
+    for f in ("budget_curve_surrogate.csv", "policy_benchmark_surrogate.csv", "surrogate_check.csv",
+              "surrogate_ranking_gain.csv"):
+        assert (synthetic_cfg.tables_dir / f).exists()
 
     customers = pd.DataFrame([{f"f{i}": 0.5 for i in range(4)}, {f"f{i}": -1.0 for i in range(4)}])
     sc = score(customers, synthetic_cfg, load_bundle(synthetic_cfg), objective="profit")
     assert set(sc.recommended_treatment) <= {"ads", "no_ads"}
     assert {"uplift_visit_ads", "uplift_conversion_ads", "expected_profit_usd"} <= set(sc.columns)
+    sc2 = score(customers, synthetic_cfg, load_bundle(synthetic_cfg), objective="profit_surrogate")
+    assert "expected_value_surrogate_ads" in sc2.columns and set(sc2.recommended_treatment) <= {"ads", "no_ads"}
 
     mon = monitoring.run(synthetic_cfg,
                          use_evidently=False)
@@ -75,3 +92,4 @@ def test_end_to_end(synthetic_cfg):
     meta = figures.run(synthetic_cfg)
     assert (synthetic_cfg.figures_dir / "qini_curves.png").exists()
     assert meta["surrogate_arm"] == "ads"
+    assert (synthetic_cfg.figures_dir / "surrogate_index.png").exists()

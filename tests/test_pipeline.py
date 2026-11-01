@@ -9,9 +9,12 @@ import pytest
 from uplift.data import DataValidationError, load_raw, sample, split, treatment_index, validate
 from uplift.dataset import available_configs, load_config
 from uplift.features import FeatureBuilder, add_segments
-from uplift.learners import HurdleRegressor, SLearner, TLearner, XLearner, make_base_learner
-from uplift.metrics import auuc_normalized, qini_coefficient, qini_relative, uplift_at_k
-from uplift.policy import assign, evaluate_action, ipw_value, value_matrix
+from uplift.learners import HurdleRegressor, SLearner, TLearner, XLearner, build_learners, make_base_learner
+from uplift.metrics import (ate_mde, auuc_normalized, corrected_resampled_ttest, event_counts,
+                            paired_bootstrap_diff, permutation_pvalue, qini_coefficient, qini_relative,
+                            uplift_at_k)
+from uplift.policy import (assign, benchmark_policies, budget_criterion, evaluate_action, ipw_value,
+                           select_budget, value_matrix)
 
 CFG = load_config("hillstrom")
 FEATURES = ["recency", "history", "log_history", "mens", "womens", "both_categories", "newbie",
@@ -135,6 +138,23 @@ def test_learners_recover_heterogeneous_effect(Learner):
     assert u[raw.womens == 1, 1].mean() - u[raw.womens == 0, 1].mean() > 0.12
 
 
+def test_causal_forest_recovers_heterogeneous_effect():
+    pytest.importorskip("econml")
+    X, t, y, raw = synthetic()
+    cf = build_learners(True, 2, extra={"causal_forest": {"min_samples_leaf": 50}})["causal_forest"]
+    u = cf.fit(X, t, y).predict_uplift(X)
+    assert u.shape == (len(X), 2)
+    assert u[raw.mens == 1, 0].mean() - u[raw.mens == 0, 0].mean() > 0.12
+    assert u[raw.womens == 1, 1].mean() - u[raw.womens == 0, 1].mean() > 0.12
+
+
+def test_extra_learners_are_optional_and_validated():
+    assert "causal_forest" not in build_learners(True, 2)
+    assert "causal_forest" in build_learners(True, 2, extra=["causal_forest"])
+    with pytest.raises(ValueError):
+        build_learners(True, 2, extra=["no_existe"])
+
+
 def test_single_treatment_learner():
     X, t, y, raw = synthetic()
     keep = t < 2  # un único tratamiento (como Criteo)
@@ -184,3 +204,81 @@ def test_value_matrix_profit():
     u = {"visit": np.zeros((2, 2)), "conversion": np.zeros((2, 2)), "spend": np.array([[1.0, 0.0], [0.0, 2.0]])}
     v = value_matrix(u, CFG, "profit", {"spend": 0.5}, 0.1)
     assert np.allclose(v, [[0.4, -0.1], [-0.1, 0.9]])
+
+
+# ── Presupuesto elegido en validación (sin leakage de test) ──────
+def test_budget_criterion():
+    assert budget_criterion(CFG, "visit") == "profit_per_1000"  # Hillstrom valoriza spend
+    no_values = type(CFG)(raw={**CFG.raw, "business": {"cost_per_contact": 0.1}})
+    assert budget_criterion(no_values, "visit") == "inc_visit_per_1000"
+
+
+def test_select_budget_takes_max_and_smallest_on_ties():
+    curve = pd.DataFrame({"budget": [0.0, 0.25, 0.5, 0.75, 1.0], "profit_per_1000": [0, 3, 5, 5, 2]})
+    assert select_budget(curve, "profit_per_1000") == 0.5
+
+
+def test_benchmark_includes_validation_budget_policy(raw):
+    t = treatment_index(raw[CFG.treatment_col], CFG)
+    u = np.random.default_rng(4).normal(size=(len(t), 2))
+    bench = benchmark_policies(u, raw, t, CFG, budget=0.5, selected_budget=0.3)
+    last = bench.iloc[-1]
+    assert last.policy == "Modelo (presupuesto de validación, 30%)"
+    assert last.share_contacted == pytest.approx(0.3, abs=1e-4)
+
+
+def test_cross_validate_returns_full_oof():
+    from uplift.train import cross_validate
+    X, t, y, raw_df = synthetic(3000)
+    df = raw_df.assign(visit=y, conversion=y, spend=y * 10.0)
+    small = type(CFG)(raw={**CFG.raw, "outcomes": [CFG.raw["outcomes"][0]],
+                           "modeling": {**CFG.raw["modeling"], "cv_folds": 2, "cv_repeats": 2}})
+    cv, oof = cross_validate(X, t, df, small)
+    assert set(oof) == {"visit"} and len(cv) == 2 * 2 * len(oof["visit"])
+    for u in oof["visit"].values():
+        assert u.shape == (len(X), 2) and np.isfinite(u).all()
+    # todas las filas reciben predicción out-of-fold (ninguna queda en el 0 inicial)
+    assert (oof["visit"]["t_learner_linear"] != 0).all()
+
+
+# ── Significancia estadística ────────────────────────────────────
+def _heterogeneous(n=8000, seed=5):
+    rng = np.random.default_rng(seed)
+    x, w = rng.normal(size=n), rng.integers(0, 2, n)
+    y = rng.binomial(1, 0.10 + 0.15 * w * (x > 0))  # sólo responde la mitad x > 0
+    return x, w, y, rng
+
+
+def test_permutation_pvalue_detects_signal_and_not_noise():
+    x, w, y, rng = _heterogeneous()
+    assert permutation_pvalue(qini_relative, y, w, x, n_perm=99, seed=0) <= 0.02
+    # Bajo H0 (score sin información) el p-valor es ≈ uniforme: rechaza ≈ 5 % de las veces
+    p_null = [permutation_pvalue(qini_relative, y[:3000], w[:3000], rng.normal(size=3000), n_perm=39, seed=i)
+              for i in range(40)]
+    assert np.mean(np.array(p_null) <= 0.05) < 0.2
+
+
+def test_paired_bootstrap_diff_favours_better_model():
+    x, w, y, rng = _heterogeneous()
+    d = paired_bootstrap_diff(qini_relative, y, w, x, rng.normal(size=len(x)), n_boot=100, seed=0)
+    assert d["diff"] > 0 and d["ci95"][0] > 0 and d["p_value"] < 0.05
+
+
+def test_corrected_ttest_is_more_conservative_than_naive():
+    from scipy import stats
+    d = np.array([0.05, 0.02, 0.04, 0.01, 0.06, 0.03, 0.00, 0.05, 0.02, 0.04])
+    _, p_corr = corrected_resampled_ttest(d, n_train=800, n_test=200)
+    p_naive = stats.ttest_1samp(d, 0).pvalue
+    assert p_corr > p_naive
+    t, _ = corrected_resampled_ttest(d, 800, 200)
+    assert t == pytest.approx(d.mean() / np.sqrt((1 / 10 + 200 / 800) * d.var(ddof=1)))
+
+
+def test_event_counts_and_mde():
+    y = np.array([1, 0, 0, 2.5, 0, 1, 0, 0])
+    w = np.array([1, 1, 1, 1, 0, 0, 0, 0])
+    assert event_counts(y, w) == {"n_treated": 4, "n_control": 4, "events_treated": 2, "events_control": 1}
+    x, w2, y2, _ = _heterogeneous()
+    small, big = ate_mde(y2[:2000], w2[:2000]), ate_mde(y2, w2)
+    assert big < small  # más muestra ⇒ efecto mínimo detectable menor
+    assert big == pytest.approx(small / 2, rel=0.15)
