@@ -12,6 +12,17 @@ Notación, para un ranking descendente por score y cada corte ``i``:
 * AUUC normalizado = (A_modelo − A_random) / (A_perfecto − A_random) [sólo binario]
 * Qini relativo    = (A_modelo − A_random) / (N · |Q(N)|): área sobre el azar,
   normalizada por el efecto total; comparable entre outcomes (incluido spend).
+
+Significancia estadística (outcomes raros, p. ej. ≈ 170 conversiones en test):
+
+* ``bootstrap_metric``: IC percentil de una métrica.
+* ``permutation_pvalue``: H0 «el ranking del modelo no es mejor que uno al azar».
+* ``paired_bootstrap_diff``: diferencia entre dos modelos con el MISMO remuestreo
+  (comparación pareada: el ruido común a ambos se cancela).
+* ``corrected_resampled_ttest``: t-test de Nadeau & Bengio (2003) sobre los folds
+  de una CV repetida, con la varianza corregida por el solapamiento de los train.
+* ``event_counts`` / ``ate_mde``: tamaño efectivo de la muestra y efecto mínimo
+  detectable, para leer los resultados a la luz de la potencia disponible.
 """
 
 from __future__ import annotations
@@ -148,3 +159,69 @@ def bootstrap_metric(fn, y, w, score, n_boot: int = 200, seed: int = 0, alpha: f
         vals.append(fn(y[i], w[i], score[i]))
     lo, hi = np.nanpercentile(vals, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     return float(lo), float(hi)
+
+
+def permutation_pvalue(fn, y, w, score, n_perm: int = 500, seed: int = 0) -> float:
+    """p-valor (una cola) de H0: el ranking del modelo no supera a un ranking aleatorio.
+
+    Se mantienen fijos ``y`` y ``w`` (y por lo tanto el efecto total) y se permuta el
+    score: la distribución resultante es la de la métrica bajo un modelo sin
+    capacidad de ordenar. p = (1 + #{perm ≥ obs}) / (1 + n_perm).
+    """
+    rng = np.random.default_rng(seed)
+    y, w, score = np.asarray(y), np.asarray(w), np.asarray(score)
+    obs = fn(y, w, score)
+    null = np.array([fn(y, w, rng.permutation(score)) for _ in range(n_perm)])
+    return float((1 + np.sum(null >= obs)) / (1 + n_perm))
+
+
+def paired_bootstrap_diff(fn, y, w, score_a, score_b, n_boot: int = 200, seed: int = 0,
+                          alpha: float = 0.05) -> dict:
+    """Diferencia ``fn(a) − fn(b)`` con IC bootstrap pareado y p-valor de una cola (H0: a ≤ b)."""
+    rng = np.random.default_rng(seed)
+    y, w = np.asarray(y), np.asarray(w)
+    sa, sb = np.asarray(score_a), np.asarray(score_b)
+    n = len(y)
+    diffs = []
+    for _ in range(n_boot):
+        i = rng.integers(0, n, n)
+        diffs.append(fn(y[i], w[i], sa[i]) - fn(y[i], w[i], sb[i]))
+    diffs = np.asarray(diffs)
+    lo, hi = np.nanpercentile(diffs, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    return {"diff": float(fn(y, w, sa) - fn(y, w, sb)), "ci95": [float(lo), float(hi)],
+            "p_value": float((1 + np.sum(diffs <= 0)) / (1 + n_boot))}
+
+
+def corrected_resampled_ttest(diffs, n_train: float, n_test: float) -> tuple[float, float]:
+    """t-test corregido de Nadeau & Bengio (2003) para diferencias por fold de una CV repetida.
+
+    Los folds comparten datos de entrenamiento, así que las diferencias no son
+    independientes y el t-test clásico subestima la varianza. La corrección usa
+    Var = (1/J + n_test/n_train) · s². Devuelve (t, p bilateral) con J − 1 g.l.
+    """
+    from scipy import stats
+
+    d = np.asarray(diffs, dtype=float)
+    j = len(d)
+    var = (1 / j + n_test / n_train) * np.var(d, ddof=1)
+    if j < 2 or var <= 0:
+        return float("nan"), float("nan")
+    t = float(np.mean(d) / np.sqrt(var))
+    return t, float(2 * stats.t.sf(abs(t), df=j - 1))
+
+
+def event_counts(y, w) -> dict:
+    """Tamaño por grupo y cantidad de eventos (y > 0) en tratados y controles."""
+    y, w = np.asarray(y, float), np.asarray(w, int)
+    return {"n_treated": int(w.sum()), "n_control": int((1 - w).sum()),
+            "events_treated": int(((y > 0) & (w == 1)).sum()),
+            "events_control": int(((y > 0) & (w == 0)).sum())}
+
+
+def ate_mde(y, w, alpha: float = 0.05, power: float = 0.80) -> float:
+    """Efecto promedio mínimo detectable (test bilateral) con los tamaños y varianzas observados."""
+    from scipy import stats
+
+    y, w = np.asarray(y, float), np.asarray(w, int)
+    se = np.sqrt(y[w == 1].var(ddof=1) / w.sum() + y[w == 0].var(ddof=1) / (1 - w).sum())
+    return float((stats.norm.ppf(1 - alpha / 2) + stats.norm.ppf(power)) * se)

@@ -25,8 +25,8 @@ from uplift.data import load_split, treatment_index  # noqa: E402
 from uplift.dataset import available_configs, load_config  # noqa: E402
 from uplift.features import add_segments, quantile_bins  # noqa: E402
 from uplift.learners import LEARNER_LABELS  # noqa: E402
-from uplift.policy import assign, evaluate_action, value_matrix  # noqa: E402
-from uplift.predict import load_bundle, score  # noqa: E402
+from uplift.policy import assign, evaluate_action, select_budget, value_matrix  # noqa: E402
+from uplift.predict import load_bundle, objectives, score  # noqa: E402
 
 st.set_page_config(page_title="Uplift — Simulador de campañas", page_icon="📧", layout="wide")
 
@@ -55,16 +55,53 @@ def get_test_uplifts(name):
     cfg = load_config(name)
     sel = get_bundle(name)["selected"]
     npz = np.load(cfg.models_dir / "test_uplift.npz")
-    return {o: npz[f"{o}__{sel[o]}"].astype(float) for o in cfg.outcome_names}
+    out = {o: npz[f"{o}__{sel[o]}"].astype(float) for o in cfg.outcome_names}
+    if "surrogate__index" in npz.files:  # ingreso incremental según el índice sustituto
+        out["surrogate"] = npz["surrogate__index"].astype(float)
+    return out
+
+
+@st.cache_data
+def get_train(name):
+    return load_split("train", load_config(name))
+
+
+@st.cache_data
+def get_oof_uplifts(name):
+    """Uplift out-of-fold en train del learner seleccionado (conjunto de validación).
+
+    ``None`` si el modelo se entrenó con una versión anterior del pipeline.
+    """
+    cfg = load_config(name)
+    path = cfg.models_dir / "train_oof_uplift.npz"
+    if not path.exists():
+        return None
+    npz = np.load(path)
+    return {o: npz[o].astype(float) for o in [*cfg.outcome_names, "surrogate"] if o in npz.files}
+
+
+@st.cache_data
+def get_surrogate_outcome(name, split="test"):
+    """Resultado sustituto observado Y* (visita valorizada) de cada cliente, o ``None``."""
+    cfg, sur = load_config(name), get_bundle(name).get("surrogate")
+    if sur is None:
+        return None
+    df = get_train(name) if split == "validation" else get_test(name)
+    return sur.outcome(df, treatment_index(df[cfg.treatment_col], cfg), cfg)
 
 
 @st.cache_data(show_spinner="Calculando curva de presupuesto…")
-def budget_curve(name, objective, values_items, cost):
+def budget_curve(name, objective, values_items, cost, split="test"):
+    """Curva de presupuesto en test (evaluación) o en validación (OOF de train, para elegir)."""
     cfg = load_config(name)
-    test = get_test(name)
-    t = treatment_index(test[cfg.treatment_col], cfg)
-    V = value_matrix(get_test_uplifts(name), cfg, objective, dict(values_items), cost)
-    return pd.DataFrame([{"budget": b, **evaluate_action(assign(V, budget=b), test, t, cfg, dict(values_items), cost)}
+    if split == "validation":
+        df, U = get_train(name), get_oof_uplifts(name)
+    else:
+        df, U = get_test(name), get_test_uplifts(name)
+    t = treatment_index(df[cfg.treatment_col], cfg)
+    V = value_matrix(U, cfg, objective, dict(values_items), cost)
+    ys = get_surrogate_outcome(name, split)
+    return pd.DataFrame([{"budget": b, **evaluate_action(assign(V, budget=b), df, t, cfg, dict(values_items), cost, ys)}
                          for b in np.linspace(0, 1, 21)])
 
 
@@ -82,9 +119,12 @@ bundle = get_bundle(name)
 test = get_test(name)
 t = treatment_index(test[cfg.treatment_col], cfg)
 UP = get_test_uplifts(name)
+YS = get_surrogate_outcome(name)
 B = cfg.business
 
 obj_labels = {"profit": "Beneficio (valor × incremental − costo)"} if B["values"] else {}
+if "surrogate" in UP and "profit_surrogate" in objectives(cfg):
+    obj_labels["profit_surrogate"] = "Beneficio con visita valorizada (índice sustituto)"
 obj_labels.update({o.name: f"{o.label} incremental" for o in cfg.outcomes})
 objective = st.sidebar.selectbox("Objetivo de optimización", list(obj_labels), format_func=obj_labels.get)
 base_size = st.sidebar.number_input("Tamaño de la base de clientes", 1_000, 100_000_000,
@@ -121,7 +161,7 @@ with tab1:
     policies = {"Modelo de uplift": assign(V, budget=budget), "Envío aleatorio (mismo presupuesto)": rand}
     for k, arm in enumerate(cfg.treatments, start=1):
         policies[f"Contactar a todos — {arm.name}"] = np.full(n, k)
-    res = {k: evaluate_action(a, test, t, cfg, values, cost) for k, a in policies.items()}
+    res = {k: evaluate_action(a, test, t, cfg, values, cost, YS) for k, a in policies.items()}
     m = res["Modelo de uplift"]
 
     cols = st.columns(1 + len(cfg.outcomes) + (1 if B["values"] else 0))
@@ -160,15 +200,22 @@ with tab1:
         disp["beneficio (US$)"] = (comp.profit_per_1000 * scale).round(0)
         disp["IC 95 % beneficio"] = [f"{lo * scale:,.0f} a {hi * scale:,.0f}"
                                      for lo, hi in zip(comp.profit_lo, comp.profit_hi)]
+    if "profit_sur_per_1000" in comp:
+        disp["beneficio sustituto (US$)"] = (comp.profit_sur_per_1000 * scale).round(0)
+        disp["IC 95 % sustituto"] = [f"{lo * scale:,.0f} a {hi * scale:,.0f}"
+                                     for lo, hi in zip(comp.profit_sur_lo, comp.profit_sur_hi)]
     st.subheader("Comparación de políticas")
     st.dataframe(pd.DataFrame(disp, index=comp.index), width="stretch")
 
     st.subheader("Curva de presupuesto")
     curve = budget_curve(name, objective, tuple(values.items()), cost)
-    metric_opts = (["profit"] if B["values"] else []) + cfg.outcome_names
-    metric_lbl = {"profit": "Beneficio", **{o.name: o.label for o in cfg.outcomes}}
+    metric_opts = ((["profit"] if B["values"] else []) + (["profit_sur"] if "profit_sur_per_1000" in curve else [])
+                   + cfg.outcome_names)
+    metric_lbl = {"profit": "Beneficio", "profit_sur": "Beneficio (índice sustituto)",
+                  **{o.name: o.label for o in cfg.outcomes}}
     metric = st.radio("Métrica", metric_opts, horizontal=True, format_func=metric_lbl.get)
     key, lo_k, hi_k = (("profit_per_1000", "profit_lo", "profit_hi") if metric == "profit"
+                       else ("profit_sur_per_1000", "profit_sur_lo", "profit_sur_hi") if metric == "profit_sur"
                        else (f"inc_{metric}_per_1000", f"inc_{metric}_lo", f"inc_{metric}_hi"))
     fig = go.Figure()
     x = curve.budget * 100
@@ -183,17 +230,28 @@ with tab1:
         fig.add_trace(go.Scatter(x=[0, 100], y=[0, full * scale], mode="lines", name=f"Aleatorio ({arm.name})",
                                  line=dict(color=GRAY if k == 1 else GOLD, dash=dashes[(k - 1) % 3])))
     fig.add_vline(x=budget * 100, line_color=CORAL)
+    # El presupuesto recomendado se elige en validación (OOF de train), nunca sobre la curva de test
+    has_val = get_oof_uplifts(name) is not None
+    if has_val:
+        val_curve = budget_curve(name, objective, tuple(values.items()), cost, split="validation")
+        b_rec = select_budget(val_curve, key)
+        fig.add_vline(x=b_rec * 100, line_color=TEAL, line_dash="dash")
     fig.update_layout(xaxis_title="% de la base contactada", yaxis_title="Incremental", height=420,
                       template="plotly_white", legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig, width="stretch")
     st.caption("La banda sombreada es el intervalo de confianza al 95 %. Las subas y bajas de la curva "
                "dentro de la banda son ruido de estimación, no efectos reales del presupuesto.")
-    best = curve.loc[curve[key].idxmax()]
-    unit = money if metric == "profit" else (lambda v: f"{v:,.0f}")
-    st.info(f"El máximo de {metric_lbl[metric].lower()} se alcanza contactando al **{best.budget:.0%}** de la "
-            f"base ({unit(best[key] * scale)} para {base_size:,} clientes; IC 95 %: {unit(best[lo_k] * scale)} a "
-            f"{unit(best[hi_k] * scale)}). Conviene leerlo como una región de presupuestos razonables, "
-            "no como un punto exacto.")
+    unit = money if metric in ("profit", "profit_sur") else (lambda v: f"{v:,.0f}")
+    if has_val:
+        at = curve.loc[np.isclose(curve.budget, b_rec)].iloc[0]
+        st.info(f"Presupuesto recomendado: **{b_rec:.0%}** de la base (línea punteada), elegido maximizando "
+                f"{metric_lbl[metric].lower()} sobre las predicciones *out-of-fold* de train (validación), sin "
+                f"mirar test. Evaluado en test: {unit(at[key] * scale)} para {base_size:,} clientes "
+                f"(IC 95 %: {unit(at[lo_k] * scale)} a {unit(at[hi_k] * scale)}). Conviene leerlo como una "
+                "región de presupuestos razonables, no como un punto exacto.")
+    else:
+        st.warning("Este modelo se entrenó con una versión anterior del pipeline, sin predicciones de "
+                   f"validación. Reentrená con `make train DATASET={name}` para ver el presupuesto recomendado.")
 
 # ── Tab 2: segmentos ──────────────────────────────────────────────
 with tab2:

@@ -25,6 +25,17 @@ outcomes:
 primary_outcome: visit
 stratify_outcome: conversion
 
+# Índice sustituto (uplift.surrogate): la visita es el outcome principal (más eventos,
+# más potencia) y se valoriza con el embudo estimado en train:
+#   ingreso incremental = [τ_visita · P(compra|visita, brazo, estrato)
+#                          + P(visita|control) · Δ P(compra|visita)] × ticket medio del estrato
+surrogate:
+  proxy: visit
+  conversion: conversion
+  value: spend
+  strata: categoria          # segmento de `segments` (null = sin estratificar)
+  shrinkage: true            # encogimiento Bayes empírico de tasas y tickets por estrato
+
 # Orden de salida del feature engineering (determinístico, sin estado aprendido)
 features:
   - {name: recency, type: numeric}
@@ -50,7 +61,12 @@ modeling:
   cv_folds: 5
   cv_repeats: 3
   n_boot: 200
+  n_perm: 500            # permutaciones para el p-valor del Qini en test
   n_jobs: 2
+  extra_learners:          # learners opcionales además de los meta-learners
+    causal_forest:         # árbol causal de EconML (CausalForestDML)
+      n_estimators: 200
+      min_samples_leaf: 200
 
 business:
   cost_per_contact: 0.10

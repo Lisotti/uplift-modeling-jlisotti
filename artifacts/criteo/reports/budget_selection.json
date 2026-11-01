@@ -1,0 +1,32 @@
+{
+  "visit": {
+    "budget": 0.4,
+    "criterion": "profit_per_1000",
+    "validation_value": 19.305322128851543,
+    "test_value": 20.104575163398696,
+    "test_ci95": [
+      14.824755087315783,
+      25.38439523948161
+    ],
+    "share_contacted_test": 0.4
+  },
+  "conversion": {
+    "budget": 0.2,
+    "criterion": "profit_per_1000",
+    "validation_value": 20.630252100840337,
+    "test_value": 21.888888888888882,
+    "test_ci95": [
+      15.560691406164423,
+      28.21708637161334
+    ],
+    "share_contacted_test": 0.2
+  },
+  "surrogate": {
+    "budget": 0.30000000000000004,
+    "criterion": "profit_sur_per_1000",
+    "validation_value": 20.573694336762333,
+    "test_value_surrogate": 21.175198569797818,
+    "test_value_observed": 21.87254901960784,
+    "share_contacted_test": 0.3
+  }
+}
