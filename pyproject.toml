@@ -10,7 +10,7 @@ python = ">=3.11,<3.13"
 
 # ── Core data science ──────────────────────────────────────────
 pandas     = "^2.2"
-numpy      = "^1.26"
+numpy      = "^2.0"
 scipy      = "^1.13"
 
 # ── Machine learning ───────────────────────────────────────────
@@ -21,6 +21,8 @@ lightgbm     = "^4.5"
 # ── Uplift modeling ────────────────────────────────────────────
 # Métricas de uplift: AUUC, Qini coefficient, curvas de uplift
 scikit-uplift = "^0.5"
+# Árboles causales (Causal Forest / CausalForestDML) como alternativa a los meta-learners
+econml = "^0.17"
 
 # ── Visualización ──────────────────────────────────────────────
 matplotlib = "^3.9"

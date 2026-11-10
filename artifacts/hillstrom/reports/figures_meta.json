@@ -1,0 +1,15 @@
+{
+  "surrogate_r2": 0.9432945062091931,
+  "surrogate_arm": "womens",
+  "surrogate_importance": {
+    "womens": 0.9040778478066825,
+    "newbie": 0.04074593306812414,
+    "mens": 0.026465207969090247,
+    "history": 0.01452734398473809,
+    "recency": 0.014183667171365183
+  },
+  "heatmap": [
+    "categoria",
+    "channel"
+  ]
+}

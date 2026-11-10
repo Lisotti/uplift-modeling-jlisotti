@@ -5,9 +5,11 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 mlruns/
+.uplift/
 
 # Configuración local
-.claude/
+.claude/*
+!.claude/skills/
 .vscode/
 
 # Entregas y material de la cátedra (no se versionan)
@@ -18,6 +20,7 @@ consignas/
 scripts/build_report.py
 scripts/docx_helpers.py
 scripts/docx_to_pdf.py
+scripts/report_criteo.py
 generate_eda_report.py
 assets/
 

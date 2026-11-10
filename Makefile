@@ -12,7 +12,7 @@ help:
 	@echo "Datasets disponibles: $$(ls configs | sed 's/.yaml//' | tr '\n' ' ')"
 	@echo ""
 	@echo "install     Instala dependencias (poetry install)"
-	@echo "download    Descarga los datos del dataset (source.url de la config)"
+	@echo "download    Descarga los datos del dataset (Criteo: desde Kaggle, ver README)"
 	@echo "            Criteo a mano: https://www.kaggle.com/datasets/arashnic/uplift-modeling -> data/raw/"
 	@echo "eda         EDA genérico -> artifacts/\$$DATASET/reports"
 	@echo "train       CV, entrenamiento, evaluación y MLflow -> artifacts/\$$DATASET"
